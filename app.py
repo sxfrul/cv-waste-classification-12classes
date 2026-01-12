@@ -1,6 +1,6 @@
 import streamlit as st
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter # Added ImageFilter for blurring
 import time
 import os
 
@@ -84,7 +84,48 @@ def predict_pt(image, model):
     end_time = time.time()
     return CLASS_NAMES[classes.item()], conf.item(), end_time - start_time
 
-# --- 5. UI Layout (Centered Image & Matched Height) ---
+# --- Helper Function for Letterboxing effect ---
+def create_letterbox_image(input_image, target_height=450, canvas_width=600):
+    """
+    Creates a composite image: blurred zoomed background with centered original image.
+    Target height 450px matches approx height of the two result boxes.
+    """
+    target_size = (canvas_width, target_height)
+    bg_w, bg_h = target_size
+
+    # 1. Create Background (Zoomed-to-fill & Blurred)
+    # Calculate scaling factor to fill the container completely
+    ratio_w = bg_w / input_image.width
+    ratio_h = bg_h / input_image.height
+    scale_factor = max(ratio_w, ratio_h)
+    
+    new_bg_size = (int(input_image.width * scale_factor), int(input_image.height * scale_factor))
+    background = input_image.resize(new_bg_size, Image.LANCZOS)
+    
+    # Center crop to exact canvas size
+    left = (background.width - bg_w) / 2
+    top = (background.height - bg_h) / 2
+    background = background.crop((left, top, left + bg_w, top + bg_h))
+    
+    # Apply heavy blur
+    background = background.filter(ImageFilter.GaussianBlur(radius=30))
+
+    # 2. Create Foreground (Aspect Fit)
+    foreground = input_image.copy()
+    # thumbnail resizes in-place to fit within dimensions while keeping aspect ratio
+    foreground.thumbnail(target_size, Image.LANCZOS)
+
+    # 3. Compose (Center foreground on background)
+    fg_w, fg_h = foreground.size
+    offset_x = (bg_w - fg_w) // 2
+    offset_y = (bg_h - fg_h) // 2
+    
+    # Paste foreground onto background (using foreground as mask for transparency if png)
+    background.paste(foreground, (offset_x, offset_y), foreground.convert('RGBA'))
+
+    return background
+
+# --- 5. UI Layout (Horizontal with Letterboxed Image) ---
 
 uploaded_file = st.file_uploader("Choose a waste image...", type=["jpg", "jpeg", "png"])
 
@@ -94,23 +135,16 @@ if uploaded_file is not None:
     # Split into two main columns
     col1, col2 = st.columns([1, 1])
     
-    # --- Left Column: Image (Centered) ---
+    # --- Left Column: Image (Centered Letterbox) ---
     with col1:
         st.info("🖼️ **Input Image**")
         
-        # UI TRICK: Create 3 sub-columns [spacer, image, spacer] to center content
-        # The middle column is 6x wider than the side spacers
+        # Use sub-columns to center the canvas horizontally
         c1, c2, c3 = st.columns([1, 6, 1])
-        
         with c2:
-            # Resize image to approx height of the two result boxes combined (approx 450px)
-            fixed_height = 450
-            aspect_ratio = image.width / image.height
-            new_width = int(fixed_height * aspect_ratio)
-            display_image = image.resize((new_width, fixed_height))
-            
-            # Display image (centered by the columns above)
-            st.image(display_image)
+            # Create the composite image with fixed height 450px
+            composite_image = create_letterbox_image(image, target_height=450, canvas_width=600)
+            st.image(composite_image, use_column_width=True)
 
     # --- Right Column: Results ---
     with col2:
