@@ -84,27 +84,34 @@ def predict_pt(image, model):
     end_time = time.time()
     return CLASS_NAMES[classes.item()], conf.item(), end_time - start_time
 
-# --- 5. UI Layout (Horizontal) ---
+# --- 5. UI Layout (Horizontal with Fixed Height) ---
 
-# File uploader spans the full width at the top
 uploaded_file = st.file_uploader("Choose a waste image...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file).convert('RGB')
     
-    # Create two columns: Left (Image) and Right (Results)
     col1, col2 = st.columns([1, 1])
     
     # --- Left Column: Image ---
     with col1:
         st.info("🖼️ **Input Image**")
-        st.image(image, use_column_width=True)
+        
+        # --- FIXED HEIGHT LOGIC ---
+        # Resize the image for DISPLAY ONLY to a fixed height (e.g. 500px)
+        # This prevents it from taking up the whole screen
+        fixed_height = 500
+        aspect_ratio = image.width / image.height
+        new_width = int(fixed_height * aspect_ratio)
+        
+        display_image = image.resize((new_width, fixed_height))
+        
+        st.image(display_image)
 
     # --- Right Column: Results ---
     with col2:
         st.info("📊 **Predictions**")
         
-        # We put the button here so it aligns with the results side
         if st.button('Run Analysis', type="primary", use_container_width=True):
             if tf_model and pt_model:
                 
@@ -114,7 +121,6 @@ if uploaded_file is not None:
                     try:
                         label, conf, t = predict_tf(image, tf_model)
                         
-                        # Use columns inside the container for neat stats
                         m1, m2, m3 = st.columns(3)
                         m1.metric("Prediction", label.upper())
                         m2.metric("Confidence", f"{conf:.1%}")
@@ -129,7 +135,6 @@ if uploaded_file is not None:
                     try:
                         label, conf, t = predict_pt(image, pt_model)
                         
-                        # Use columns inside the container for neat stats
                         p1, p2, p3 = st.columns(3)
                         p1.metric("Prediction", label.upper())
                         p2.metric("Confidence", f"{conf:.1%}")
