@@ -4,7 +4,7 @@ from PIL import Image
 import time
 import os
 
-# --- 1. Library Imports (Cached for speed) ---
+# --- 1. Library Imports (Cached) ---
 @st.cache_resource
 def load_libraries():
     import tensorflow as tf
@@ -15,7 +15,7 @@ def load_libraries():
 
 tf, torch, models, transforms, nn = load_libraries()
 
-# --- 2. Configuration & Class Names ---
+# --- 2. Configuration ---
 CLASS_NAMES = [
     'batteries', 'biological', 'brown-glass', 'cardboard', 'clothes', 
     'green-glass', 'metal', 'paper', 'plastic', 'shoes', 'trash', 'white-glass'
@@ -84,29 +84,33 @@ def predict_pt(image, model):
     end_time = time.time()
     return CLASS_NAMES[classes.item()], conf.item(), end_time - start_time
 
-# --- 5. UI Layout (Horizontal with Fixed Height) ---
+# --- 5. UI Layout (Centered Image & Matched Height) ---
 
 uploaded_file = st.file_uploader("Choose a waste image...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file).convert('RGB')
     
+    # Split into two main columns
     col1, col2 = st.columns([1, 1])
     
-    # --- Left Column: Image ---
+    # --- Left Column: Image (Centered) ---
     with col1:
         st.info("🖼️ **Input Image**")
         
-        # --- FIXED HEIGHT LOGIC ---
-        # Resize the image for DISPLAY ONLY to a fixed height (e.g. 500px)
-        # This prevents it from taking up the whole screen
-        fixed_height = 500
-        aspect_ratio = image.width / image.height
-        new_width = int(fixed_height * aspect_ratio)
+        # UI TRICK: Create 3 sub-columns [spacer, image, spacer] to center content
+        # The middle column is 6x wider than the side spacers
+        c1, c2, c3 = st.columns([1, 6, 1])
         
-        display_image = image.resize((new_width, fixed_height))
-        
-        st.image(display_image)
+        with c2:
+            # Resize image to approx height of the two result boxes combined (approx 450px)
+            fixed_height = 450
+            aspect_ratio = image.width / image.height
+            new_width = int(fixed_height * aspect_ratio)
+            display_image = image.resize((new_width, fixed_height))
+            
+            # Display image (centered by the columns above)
+            st.image(display_image)
 
     # --- Right Column: Results ---
     with col2:
@@ -115,30 +119,26 @@ if uploaded_file is not None:
         if st.button('Run Analysis', type="primary", use_container_width=True):
             if tf_model and pt_model:
                 
-                # Container for TensorFlow Results
+                # Container 1: TF
                 with st.container(border=True):
                     st.markdown("### 🧠 Simple CNN (TF)")
                     try:
                         label, conf, t = predict_tf(image, tf_model)
-                        
                         m1, m2, m3 = st.columns(3)
                         m1.metric("Prediction", label.upper())
                         m2.metric("Confidence", f"{conf:.1%}")
                         m3.metric("Time", f"{t:.4f}s")
-                        
                     except Exception as e:
                         st.error(f"Error: {e}")
 
-                # Container for PyTorch Results
+                # Container 2: PyTorch
                 with st.container(border=True):
                     st.markdown("### 🚀 MobileNetV3 (PyTorch)")
                     try:
                         label, conf, t = predict_pt(image, pt_model)
-                        
                         p1, p2, p3 = st.columns(3)
                         p1.metric("Prediction", label.upper())
                         p2.metric("Confidence", f"{conf:.1%}")
                         p3.metric("Time", f"{t:.4f}s")
-                        
                     except Exception as e:
                         st.error(f"Error: {e}")
